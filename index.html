@@ -497,6 +497,122 @@
             color: #e65100;
         }
         
+        /* Buchungskalender */
+        .kalender-grid {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            background: white;
+        }
+        
+        .kalender-header {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 0;
+            background: #f5f5f5;
+            border-bottom: 2px solid #ddd;
+            font-weight: bold;
+        }
+        
+        .kalender-header-left {
+            padding: 10px;
+            border-right: 1px solid #ddd;
+        }
+        
+        .kalender-header-right {
+            display: flex;
+            overflow-x: auto;
+        }
+        
+        .kalender-day {
+            min-width: 50px;
+            padding: 10px 5px;
+            text-align: center;
+            border-right: 1px solid #eee;
+            font-size: 0.8em;
+        }
+        
+        .kalender-day.today {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .kalender-row {
+            display: contents;
+        }
+        
+        .kalender-werkzeug {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            border-right: 1px solid #ddd;
+            font-weight: bold;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+        }
+        
+        .kalender-timeline {
+            border-bottom: 1px solid #eee;
+            position: relative;
+            display: flex;
+            min-height: 50px;
+            align-items: center;
+        }
+        
+        .kalender-timeline-inner {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+        }
+        
+        .kalender-day-cell {
+            min-width: 50px;
+            border-right: 1px solid #eee;
+            position: relative;
+        }
+        
+        .kalender-day-cell.today {
+            background: #e3f2fd;
+        }
+        
+        .kalender-booking {
+            position: absolute;
+            top: 5px;
+            bottom: 5px;
+            border-radius: 3px;
+            padding: 2px 5px;
+            font-size: 0.75em;
+            color: white;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+            z-index: 10;
+        }
+        
+        .kalender-booking.reserviert {
+            background: #ff9800;
+        }
+        
+        .kalender-booking.ausgeliehen {
+            background: #f44336;
+        }
+        
+        .kalender-booking.zurueckgegeben {
+            background: #9e9e9e;
+        }
+        
+        .kalender-booking:hover {
+            opacity: 0.8;
+            z-index: 20;
+        }
+        
         /* Print Styles für QR-Code */
         @media print {
             body * {
@@ -611,6 +727,12 @@
                         <h2>Dashboard</h2>
                         <div class="dashboard" id="dashboard"></div>
                         
+                        <div class="toolbar" style="margin-top: 20px;">
+                            <button class="btn-primary" onclick="showWerkzeugverwaltung()">🔧 Werkzeugverwaltung</button>
+                            <button class="btn-secondary" onclick="showBuchungskalender()">📅 Buchungskalender</button>
+                        </div>
+                        
+                        <div id="werkzeugverwaltungView">
                         <h2>Werkzeugverwaltung</h2>
                         
                         <div class="toolbar">
@@ -665,6 +787,7 @@
                                 <thead>
                                     <tr>
                                         <th>Werkzeug</th>
+                                        <th>Lagerplatz</th>
                                         <th>Mitarbeiter</th>
                                         <th>Von/Bis</th>
                                         <th>Status</th>
@@ -679,6 +802,29 @@
                         <div class="section">
                             <h3>Schadensmeldungen</h3>
                             <div id="schadensberichte"></div>
+                        </div>
+                        </div>
+                        
+                        <!-- Buchungskalender View -->
+                        <div id="buchungskalenderView" class="hidden">
+                            <h2>📅 Buchungskalender</h2>
+                            
+                            <div class="filter-bar">
+                                <label style="display: flex; align-items: center; gap: 10px;">
+                                    Von:
+                                    <input type="date" id="kalenderVon" onchange="loadBuchungskalender()">
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 10px;">
+                                    Bis:
+                                    <input type="date" id="kalenderBis" onchange="loadBuchungskalender()">
+                                </label>
+                                <select id="kalenderWerkzeugFilter" onchange="loadBuchungskalender()">
+                                    <option value="">Alle Werkzeuge</option>
+                                </select>
+                                <button class="btn-secondary btn-small" onclick="resetKalenderFilter()">Heute + 30 Tage</button>
+                            </div>
+                            
+                            <div id="kalenderContainer" style="overflow-x: auto; margin-top: 20px;"></div>
                         </div>
                     </div>
                 </div>
@@ -730,6 +876,11 @@
             <div class="form-group">
                 <label>Werkzeugname: *</label>
                 <input type="text" id="werkzeugName">
+            </div>
+            <div class="form-group">
+                <label>Icon (Emoji):</label>
+                <input type="text" id="werkzeugIcon" placeholder="z.B. 🔨 🔧 ⚡ 🪛" maxlength="2" style="font-size: 2em; text-align: center; width: 80px;">
+                <small style="color: #999; display: block; margin-top: 5px;">Emoji-Picker des Geräts nutzen oder kopieren/einfügen</small>
             </div>
             <div class="form-group">
                 <label>Kategorie: *</label>
@@ -1093,6 +1244,7 @@
                 CREATE TABLE werkzeuge (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
+                    icon TEXT,
                     beschreibung TEXT,
                     inventarnummer TEXT UNIQUE NOT NULL,
                     zustand TEXT,
@@ -1141,6 +1293,13 @@
             try {
                 // Lagerplatz-Spalte hinzufügen
                 db.run(`ALTER TABLE werkzeuge ADD COLUMN lagerplatz TEXT`);
+            } catch (e) {
+                // Spalte existiert bereits
+            }
+            
+            try {
+                // Icon-Spalte hinzufügen
+                db.run(`ALTER TABLE werkzeuge ADD COLUMN icon TEXT`);
             } catch (e) {
                 // Spalte existiert bereits
             }
@@ -1829,22 +1988,22 @@
         }
         
         function resolveSchaden(schadenId, werkzeugId) {
-            if (!confirm('Schaden als behoben markieren?')) return;
+            if (!confirm('Schaden als behoben markieren? Die Schadensmeldung wird automatisch gelöscht.')) return;
             
-            db.run("UPDATE schaeden SET status = 'behoben' WHERE id = ?", [schadenId]);
+            db.run("DELETE FROM schaeden WHERE id = ?", [schadenId]);
             db.run("UPDATE werkzeuge SET status = 'verfuegbar' WHERE id = ?", [werkzeugId]);
             
             if (saveDatabase()) {
                 loadDashboard();
                 loadAdminWerkzeuge();
                 loadSchadensberichte();
-                showToast('✓ Schaden behoben!');
+                showToast('✓ Schaden behoben und Meldung gelöscht!');
             }
         }
         
         function loadAlleAusleihen() {
             const stmt = db.prepare(`
-                SELECT a.*, w.name, w.inventarnummer 
+                SELECT a.*, w.name, w.inventarnummer, w.lagerplatz 
                 FROM ausleihen a 
                 JOIN werkzeuge w ON a.werkzeug_id = w.id 
                 ORDER BY a.reserviert_am DESC
@@ -1864,7 +2023,7 @@
             tbody.innerHTML = '';
             
             if (ausleihen.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px; color: #999;">Keine Ausleihen gefunden</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 20px; color: #999;">Keine Ausleihen gefunden</td></tr>';
                 return;
             }
             
@@ -1897,6 +2056,7 @@
                 
                 tr.innerHTML = `
                     <td><strong>${a.name}</strong><br><small>${a.inventarnummer}</small></td>
+                    <td>${a.lagerplatz || '-'}</td>
                     <td>${a.mitarbeiter_name || '-'}</td>
                     <td>${formatDate(a.datum_von)} - ${formatDate(a.datum_bis)}</td>
                     <td>${statusBadge}</td>
@@ -2314,6 +2474,192 @@
         
         function closeModal(modalId) {
             document.getElementById(modalId).classList.remove('active');
+        }
+        
+        // Buchungskalender
+        function showWerkzeugverwaltung() {
+            document.getElementById('werkzeugverwaltungView').classList.remove('hidden');
+            document.getElementById('buchungskalenderView').classList.add('hidden');
+        }
+        
+        function showBuchungskalender() {
+            document.getElementById('werkzeugverwaltungView').classList.add('hidden');
+            document.getElementById('buchungskalenderView').classList.remove('hidden');
+            
+            // Werkzeuge für Filter laden
+            const select = document.getElementById('kalenderWerkzeugFilter');
+            select.innerHTML = '<option value="">Alle Werkzeuge</option>';
+            
+            const stmt = db.prepare('SELECT id, name, inventarnummer FROM werkzeuge ORDER BY name');
+            while (stmt.step()) {
+                const w = stmt.getAsObject();
+                const option = document.createElement('option');
+                option.value = w.id;
+                option.textContent = `${w.name} (${w.inventarnummer})`;
+                select.appendChild(option);
+            }
+            stmt.free();
+            
+            // Standard: Heute + 30 Tage
+            resetKalenderFilter();
+        }
+        
+        function resetKalenderFilter() {
+            const heute = new Date();
+            const in30Tagen = new Date();
+            in30Tagen.setDate(heute.getDate() + 30);
+            
+            document.getElementById('kalenderVon').value = heute.toISOString().split('T')[0];
+            document.getElementById('kalenderBis').value = in30Tagen.toISOString().split('T')[0];
+            document.getElementById('kalenderWerkzeugFilter').value = '';
+            
+            loadBuchungskalender();
+        }
+        
+        function loadBuchungskalender() {
+            const von = document.getElementById('kalenderVon').value;
+            const bis = document.getElementById('kalenderBis').value;
+            const werkzeugFilter = document.getElementById('kalenderWerkzeugFilter').value;
+            
+            if (!von || !bis) {
+                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">Bitte Zeitraum auswählen</p>';
+                return;
+            }
+            
+            const startDate = new Date(von);
+            const endDate = new Date(bis);
+            
+            if (endDate < startDate) {
+                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">❌ "Bis"-Datum muss nach "Von"-Datum liegen!</p>';
+                return;
+            }
+            
+            const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            
+            if (daysDiff > 90) {
+                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #ff9800; padding: 20px;">⚠️ Zeitraum zu groß (max. 90 Tage)</p>';
+                return;
+            }
+            
+            // Werkzeuge laden
+            let werkzeugeQuery = 'SELECT * FROM werkzeuge';
+            const params = [];
+            
+            if (werkzeugFilter) {
+                werkzeugeQuery += ' WHERE id = ?';
+                params.push(werkzeugFilter);
+            }
+            
+            werkzeugeQuery += ' ORDER BY name';
+            
+            const werkzeugeStmt = db.prepare(werkzeugeQuery);
+            werkzeugeStmt.bind(params);
+            
+            const werkzeuge = [];
+            while (werkzeugeStmt.step()) {
+                werkzeuge.push(werkzeugeStmt.getAsObject());
+            }
+            werkzeugeStmt.free();
+            
+            if (werkzeuge.length === 0) {
+                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">Keine Werkzeuge gefunden</p>';
+                return;
+            }
+            
+            // Ausleihen/Reservierungen im Zeitraum laden
+            const ausleihenStmt = db.prepare(`
+                SELECT * FROM ausleihen 
+                WHERE status IN ('reserviert', 'ausgeliehen', 'zurueckgegeben')
+                AND (
+                    (datum_von <= ? AND datum_bis >= ?) OR
+                    (datum_von >= ? AND datum_von <= ?) OR
+                    (datum_bis >= ? AND datum_bis <= ?)
+                )
+            `);
+            
+            ausleihenStmt.bind([bis, von, von, bis, von, bis]);
+            
+            const ausleihen = [];
+            while (ausleihenStmt.step()) {
+                ausleihen.push(ausleihenStmt.getAsObject());
+            }
+            ausleihenStmt.free();
+            
+            // Kalender rendern
+            renderKalender(werkzeuge, ausleihen, startDate, endDate, daysDiff);
+        }
+        
+        function renderKalender(werkzeuge, ausleihen, startDate, endDate, days) {
+            const container = document.getElementById('kalenderContainer');
+            
+            // Header mit Datumsleiste
+            let headerHTML = '<div class="kalender-header">';
+            headerHTML += '<div class="kalender-header-left">Werkzeug</div>';
+            headerHTML += '<div class="kalender-header-right">';
+            
+            const heute = new Date();
+            heute.setHours(0, 0, 0, 0);
+            
+            for (let i = 0; i < days; i++) {
+                const day = new Date(startDate);
+                day.setDate(startDate.getDate() + i);
+                
+                const isToday = day.getTime() === heute.getTime();
+                const dayStr = day.getDate();
+                const monthStr = (day.getMonth() + 1).toString().padStart(2, '0');
+                
+                headerHTML += `<div class="kalender-day ${isToday ? 'today' : ''}">${dayStr}.${monthStr}</div>`;
+            }
+            
+            headerHTML += '</div></div>';
+            
+            // Werkzeug-Rows mit Timeline
+            let rowsHTML = '';
+            
+            werkzeuge.forEach(w => {
+                rowsHTML += '<div class="kalender-row">';
+                rowsHTML += `<div class="kalender-werkzeug">${w.name}<br><small>${w.inventarnummer}</small></div>`;
+                rowsHTML += '<div class="kalender-timeline">';
+                rowsHTML += '<div class="kalender-timeline-inner">';
+                
+                // Day-Cells
+                for (let i = 0; i < days; i++) {
+                    const day = new Date(startDate);
+                    day.setDate(startDate.getDate() + i);
+                    const isToday = day.getTime() === heute.getTime();
+                    
+                    rowsHTML += `<div class="kalender-day-cell ${isToday ? 'today' : ''}"></div>`;
+                }
+                
+                rowsHTML += '</div>'; // timeline-inner
+                
+                // Buchungen für dieses Werkzeug
+                const werkzeugAusleihen = ausleihen.filter(a => a.werkzeug_id === w.id);
+                
+                werkzeugAusleihen.forEach(a => {
+                    const buchungVon = new Date(a.datum_von);
+                    const buchungBis = new Date(a.datum_bis);
+                    
+                    // Position berechnen
+                    const dayWidth = 50; // min-width von kalender-day-cell
+                    
+                    let startOffset = Math.max(0, Math.ceil((buchungVon - startDate) / (1000 * 60 * 60 * 24)));
+                    let endOffset = Math.min(days - 1, Math.ceil((buchungBis - startDate) / (1000 * 60 * 60 * 24)));
+                    
+                    const left = startOffset * dayWidth;
+                    const width = (endOffset - startOffset + 1) * dayWidth;
+                    
+                    const mitarbeiter = a.mitarbeiter_name || 'Unbekannt';
+                    const title = `${mitarbeiter} (${formatDate(a.datum_von)} - ${formatDate(a.datum_bis)})`;
+                    
+                    rowsHTML += `<div class="kalender-booking ${a.status}" style="left: ${left}px; width: ${width}px;" title="${escapeQuotes(title)}">${mitarbeiter}</div>`;
+                });
+                
+                rowsHTML += '</div>'; // timeline
+                rowsHTML += '</div>'; // row
+            });
+            
+            container.innerHTML = '<div class="kalender-grid">' + headerHTML + rowsHTML + '</div>';
         }
     </script>
 </body>
