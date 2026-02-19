@@ -664,6 +664,22 @@
             <div id="appContent" class="hidden">
                 <!-- Mitarbeiter Modus -->
                 <div id="mitarbeiterMode">
+                    <div class="info" style="margin-bottom: 15px;">
+                        <strong>📅 Verfügbarkeitsprüfung:</strong> Wähle deinen gewünschten Entleihzeitraum, um nur verfügbare Werkzeuge zu sehen.
+                    </div>
+                    
+                    <div class="filter-bar" style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; gap: 10px;">
+                            Von:
+                            <input type="date" id="mitarbeiterVon" onchange="filterWerkzeugeByAvailability()">
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px;">
+                            Bis:
+                            <input type="date" id="mitarbeiterBis" onchange="filterWerkzeugeByAvailability()">
+                        </label>
+                        <button class="btn-secondary btn-small" onclick="clearMitarbeiterDateFilter()">Filter zurücksetzen</button>
+                    </div>
+                    
                     <div class="search-bar">
                         <input type="text" id="searchInput" placeholder="Werkzeug suchen..." onkeyup="filterWerkzeuge()">
                         <select id="kategorieFilter" onchange="filterWerkzeuge()">
@@ -1526,15 +1542,65 @@
             }
         }
         
-        function loadWerkzeuge() {
-            const stmt = db.prepare("SELECT * FROM werkzeuge WHERE status = 'verfuegbar' OR status = 'defekt'");
-            const werkzeuge = [];
-            while (stmt.step()) {
-                werkzeuge.push(stmt.getAsObject());
+        function checkWerkzeugAvailability(werkzeugId, vonDate, bisDate) {
+            // Prüfe ob Werkzeug im Zeitraum verfügbar ist (keine Überschneidung mit Reservierungen/Ausleihen)
+            const stmt = db.prepare(`
+                SELECT COUNT(*) as count FROM ausleihen 
+                WHERE werkzeug_id = ? 
+                AND status IN ('reserviert', 'ausgeliehen')
+                AND (
+                    (datum_von <= ? AND datum_bis >= ?) OR
+                    (datum_von >= ? AND datum_von <= ?) OR
+                    (datum_bis >= ? AND datum_bis <= ?)
+                )
+            `);
+            stmt.bind([werkzeugId, bisDate, vonDate, vonDate, bisDate, vonDate, bisDate]);
+            
+            let conflicts = 0;
+            if (stmt.step()) {
+                conflicts = stmt.getAsObject().count;
             }
             stmt.free();
             
-            const verfuegbareIds = new Set(werkzeuge.filter(w => w.status === 'verfuegbar').map(w => w.id));
+            return conflicts === 0;
+        }
+        
+        function loadWerkzeuge() {
+            const von = document.getElementById('mitarbeiterVon').value;
+            const bis = document.getElementById('mitarbeiterBis').value;
+            const hasDateFilter = von && bis;
+            
+            // Validierung
+            if (hasDateFilter && new Date(bis) < new Date(von)) {
+                const tbody = document.getElementById('werkzeugBody');
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 30px; color: #f44336;">❌ "Bis"-Datum muss nach "Von"-Datum liegen!</td></tr>';
+                document.getElementById('werkzeugTable').style.display = 'table';
+                document.getElementById('emptyWerkzeuge').classList.add('hidden');
+                return;
+            }
+            
+            const stmt = db.prepare("SELECT * FROM werkzeuge ORDER BY name");
+            const alleWerkzeuge = [];
+            while (stmt.step()) {
+                alleWerkzeuge.push(stmt.getAsObject());
+            }
+            stmt.free();
+            
+            // Filtern nach Verfügbarkeit
+            let werkzeuge;
+            if (hasDateFilter) {
+                // Nur Werkzeuge anzeigen, die im Zeitraum vollständig verfügbar sind
+                werkzeuge = alleWerkzeuge.filter(w => {
+                    if (w.status === 'defekt') return false;
+                    // Auch aktuell reservierte/ausgeliehene können später verfügbar sein
+                    return checkWerkzeugAvailability(w.id, von, bis);
+                });
+            } else {
+                // Standard: nur aktuell verfügbare oder defekte anzeigen
+                werkzeuge = alleWerkzeuge.filter(w => w.status === 'verfuegbar' || w.status === 'defekt');
+            }
+            
+            const verfuegbareIds = new Set(werkzeuge.filter(w => w.status === 'verfuegbar' || (hasDateFilter && w.status !== 'defekt')).map(w => w.id));
             warenkorb.forEach(id => {
                 if (!verfuegbareIds.has(id)) warenkorb.delete(id);
             });
@@ -1544,8 +1610,14 @@
             tbody.innerHTML = '';
             
             if (werkzeuge.length === 0) {
-                document.getElementById('werkzeugTable').style.display = 'none';
-                document.getElementById('emptyWerkzeuge').classList.remove('hidden');
+                document.getElementById('werkzeugTable').style.display = 'table';
+                document.getElementById('emptyWerkzeuge').classList.add('hidden');
+                if (hasDateFilter) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 30px; color: #999;">📅 Keine Werkzeuge im gewählten Zeitraum verfügbar</td></tr>';
+                } else {
+                    document.getElementById('werkzeugTable').style.display = 'none';
+                    document.getElementById('emptyWerkzeuge').classList.remove('hidden');
+                }
             } else {
                 document.getElementById('werkzeugTable').style.display = 'table';
                 document.getElementById('emptyWerkzeuge').classList.add('hidden');
@@ -1557,6 +1629,15 @@
                     const isDefekt = w.status === 'defekt';
                     const kategorieBadge = w.kategorie ? `<span class="kategorie-badge">${w.kategorie}</span>` : '';
                     
+                    let statusBadge = '';
+                    if (isDefekt) {
+                        statusBadge = '<span class="badge badge-defekt">Defekt</span>';
+                    } else if (hasDateFilter) {
+                        statusBadge = '<span class="badge badge-available">✓ Verfügbar im Zeitraum</span>';
+                    } else if (w.status === 'verfuegbar') {
+                        statusBadge = '<span class="badge badge-available">Verfügbar</span>';
+                    }
+                    
                     tr.innerHTML = `
                         <td>${foto}</td>
                         <td><strong>${w.name}</strong></td>
@@ -1564,7 +1645,7 @@
                         <td>${w.inventarnummer}</td>
                         <td>${w.beschreibung || '-'}</td>
                         <td>${w.zustand}</td>
-                        <td>${isDefekt ? '<span class="badge badge-defekt">Defekt</span>' : '<span class="badge badge-available">Verfügbar</span>'}</td>
+                        <td>${statusBadge}</td>
                         <td>
                             ${isDefekt ? 
                                 `<button class="btn-warning btn-small" onclick="showSchadenModal(${w.id})">🔧 Schaden melden</button>` :
@@ -1582,8 +1663,18 @@
         function filterWerkzeuge() {
             const search = document.getElementById('searchInput').value.toLowerCase();
             const kategorie = document.getElementById('kategorieFilter').value;
+            const von = document.getElementById('mitarbeiterVon').value;
+            const bis = document.getElementById('mitarbeiterBis').value;
+            const hasDateFilter = von && bis;
             
-            let query = "SELECT * FROM werkzeuge WHERE (status = 'verfuegbar' OR status = 'defekt')";
+            // Validierung
+            if (hasDateFilter && new Date(bis) < new Date(von)) {
+                const tbody = document.getElementById('werkzeugBody');
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 30px; color: #f44336;">❌ "Bis"-Datum muss nach "Von"-Datum liegen!</td></tr>';
+                return;
+            }
+            
+            let query = "SELECT * FROM werkzeuge WHERE 1=1";
             const params = [];
             
             if (search) {
@@ -1596,14 +1687,27 @@
                 params.push(kategorie);
             }
             
+            query += " ORDER BY name";
+            
             const stmt = db.prepare(query);
             stmt.bind(params);
             
-            const werkzeuge = [];
+            const alleWerkzeuge = [];
             while (stmt.step()) {
-                werkzeuge.push(stmt.getAsObject());
+                alleWerkzeuge.push(stmt.getAsObject());
             }
             stmt.free();
+            
+            // Filtern nach Verfügbarkeit im Zeitraum
+            let werkzeuge;
+            if (hasDateFilter) {
+                werkzeuge = alleWerkzeuge.filter(w => {
+                    if (w.status === 'defekt') return false;
+                    return checkWerkzeugAvailability(w.id, von, bis);
+                });
+            } else {
+                werkzeuge = alleWerkzeuge.filter(w => w.status === 'verfuegbar' || w.status === 'defekt');
+            }
             
             const tbody = document.getElementById('werkzeugBody');
             tbody.innerHTML = '';
@@ -1618,6 +1722,15 @@
                     const isDefekt = w.status === 'defekt';
                     const kategorieBadge = w.kategorie ? `<span class="kategorie-badge">${w.kategorie}</span>` : '';
                     
+                    let statusBadge = '';
+                    if (isDefekt) {
+                        statusBadge = '<span class="badge badge-defekt">Defekt</span>';
+                    } else if (hasDateFilter) {
+                        statusBadge = '<span class="badge badge-available">✓ Verfügbar im Zeitraum</span>';
+                    } else if (w.status === 'verfuegbar') {
+                        statusBadge = '<span class="badge badge-available">Verfügbar</span>';
+                    }
+                    
                     tr.innerHTML = `
                         <td>${foto}</td>
                         <td><strong>${w.name}</strong></td>
@@ -1625,7 +1738,7 @@
                         <td>${w.inventarnummer}</td>
                         <td>${w.beschreibung || '-'}</td>
                         <td>${w.zustand}</td>
-                        <td>${isDefekt ? '<span class="badge badge-defekt">Defekt</span>' : '<span class="badge badge-available">Verfügbar</span>'}</td>
+                        <td>${statusBadge}</td>
                         <td>
                             ${isDefekt ? 
                                 `<button class="btn-warning btn-small" onclick="showSchadenModal(${w.id})">🔧 Schaden melden</button>` :
@@ -1638,6 +1751,16 @@
                     tbody.appendChild(tr);
                 });
             }
+        }
+        
+        function filterWerkzeugeByAvailability() {
+            loadWerkzeuge();
+        }
+        
+        function clearMitarbeiterDateFilter() {
+            document.getElementById('mitarbeiterVon').value = '';
+            document.getElementById('mitarbeiterBis').value = '';
+            loadWerkzeuge();
         }
         
         function escapeQuotes(str) {
@@ -1676,12 +1799,24 @@
                 return;
             }
             
-            const heute = new Date();
-            const inEinerWoche = new Date();
-            inEinerWoche.setDate(heute.getDate() + 7);
+            // Prüfe ob Datumsfilter gesetzt ist
+            const filterVon = document.getElementById('mitarbeiterVon').value;
+            const filterBis = document.getElementById('mitarbeiterBis').value;
             
-            document.getElementById('datumVon').value = heute.toISOString().split('T')[0];
-            document.getElementById('datumBis').value = inEinerWoche.toISOString().split('T')[0];
+            if (filterVon && filterBis) {
+                // Übernehme Datumsbereich aus Filter
+                document.getElementById('datumVon').value = filterVon;
+                document.getElementById('datumBis').value = filterBis;
+            } else {
+                // Standard: Heute + 7 Tage
+                const heute = new Date();
+                const inEinerWoche = new Date();
+                inEinerWoche.setDate(heute.getDate() + 7);
+                
+                document.getElementById('datumVon').value = heute.toISOString().split('T')[0];
+                document.getElementById('datumBis').value = inEinerWoche.toISOString().split('T')[0];
+            }
+            
             document.getElementById('mitarbeiterName').value = '';
             
             const container = document.getElementById('warenkorbItems');
