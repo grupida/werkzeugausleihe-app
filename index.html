@@ -485,22 +485,6 @@
             margin: 0 auto;
         }
         
-        .top5-list {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .top5-list li {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-        }
-        
-        .top5-list li:last-child {
-            border-bottom: none;
-        }
-        
         .damage-report {
             background: #fff3e0;
             border-left: 4px solid #ff9800;
@@ -648,6 +632,7 @@
                                     <th>Werkzeug</th>
                                     <th>Kategorie</th>
                                     <th>Inv.-Nr.</th>
+                                    <th>Lagerplatz</th>
                                     <th>Beschreibung</th>
                                     <th>Zustand</th>
                                     <th>Status</th>
@@ -764,6 +749,10 @@
             <div class="form-group">
                 <label>Inventarnummer: *</label>
                 <input type="text" id="werkzeugInventarnummer">
+            </div>
+            <div class="form-group">
+                <label>Lagerplatz:</label>
+                <input type="text" id="werkzeugLagerplatz" placeholder="z.B. Halle A, Regal 3">
             </div>
             <div class="form-group">
                 <label>Zustand:</label>
@@ -1109,7 +1098,8 @@
                     zustand TEXT,
                     foto TEXT,
                     status TEXT DEFAULT 'verfuegbar',
-                    kategorie TEXT
+                    kategorie TEXT,
+                    lagerplatz TEXT
                 );
                 
                 CREATE TABLE ausleihen (
@@ -1144,6 +1134,13 @@
             try {
                 // Kategorie-Spalte hinzufügen
                 db.run(`ALTER TABLE werkzeuge ADD COLUMN kategorie TEXT`);
+            } catch (e) {
+                // Spalte existiert bereits
+            }
+            
+            try {
+                // Lagerplatz-Spalte hinzufügen
+                db.run(`ALTER TABLE werkzeuge ADD COLUMN lagerplatz TEXT`);
             } catch (e) {
                 // Spalte existiert bereits
             }
@@ -1277,21 +1274,6 @@
             }
             overdueStmt.free();
             
-            // Top 5 Werkzeuge
-            const top5Stmt = db.prepare(`
-                SELECT w.name, COUNT(*) as anzahl
-                FROM ausleihen a
-                JOIN werkzeuge w ON a.werkzeug_id = w.id
-                GROUP BY w.id
-                ORDER BY anzahl DESC
-                LIMIT 5
-            `);
-            let top5 = [];
-            while (top5Stmt.step()) {
-                top5.push(top5Stmt.getAsObject());
-            }
-            top5Stmt.free();
-            
             // Offene Schäden
             const schadenStmt = db.prepare(`SELECT COUNT(*) as count FROM schaeden WHERE status = 'offen'`);
             let schadenCount = 0;
@@ -1332,19 +1314,6 @@
                 </div>
                 ` : ''}
             `;
-            
-            // Top 5 anzeigen
-            if (top5.length > 0) {
-                const section = document.createElement('div');
-                section.className = 'section';
-                section.innerHTML = `
-                    <h3>🏆 Top 5 meistgenutzte Werkzeuge</h3>
-                    <ul class="top5-list">
-                        ${top5.map((t, i) => `<li><span>${i+1}. ${t.name}</span><strong>${t.anzahl}x ausgeliehen</strong></li>`).join('')}
-                    </ul>
-                `;
-                dashboard.parentNode.insertBefore(section, dashboard.nextSibling);
-            }
         }
         
         function isOverdue(datumBis) {
@@ -1693,6 +1662,7 @@
                     <td><strong>${w.name}</strong></td>
                     <td>${kategorieBadge}</td>
                     <td>${w.inventarnummer}</td>
+                    <td>${w.lagerplatz || '-'}</td>
                     <td>${w.beschreibung || '-'}</td>
                     <td>${w.zustand}</td>
                     <td>${statusBadge}</td>
@@ -1978,7 +1948,9 @@
             
             if (saveDatabase()) {
                 loadDashboard();
+                // Filter beibehalten
                 loadAlleAusleihen();
+                filterAusleihen();
                 loadAdminWerkzeuge();
                 showToast('✓ Werkzeug ausgegeben!');
             }
@@ -2012,7 +1984,9 @@
             if (saveDatabase()) {
                 closeModal('rueckgabeModal');
                 loadDashboard();
+                // Filter beibehalten
                 loadAlleAusleihen();
+                filterAusleihen();
                 loadAdminWerkzeuge();
                 showToast('✓ Rückgabe bestätigt!');
             }
@@ -2025,6 +1999,7 @@
             document.getElementById('werkzeugKategorie').value = '';
             document.getElementById('werkzeugBeschreibung').value = '';
             document.getElementById('werkzeugInventarnummer').value = '';
+            document.getElementById('werkzeugLagerplatz').value = '';
             document.getElementById('werkzeugZustand').value = 'Neu';
             document.getElementById('werkzeugFoto').value = '';
             document.getElementById('fotoPreview').innerHTML = '';
@@ -2043,6 +2018,7 @@
                 document.getElementById('werkzeugKategorie').value = w.kategorie || '';
                 document.getElementById('werkzeugBeschreibung').value = w.beschreibung || '';
                 document.getElementById('werkzeugInventarnummer').value = w.inventarnummer;
+                document.getElementById('werkzeugLagerplatz').value = w.lagerplatz || '';
                 document.getElementById('werkzeugZustand').value = w.zustand;
                 
                 const previewDiv = document.getElementById('fotoPreview');
@@ -2126,6 +2102,7 @@
             const kategorie = document.getElementById('werkzeugKategorie').value;
             const beschreibung = document.getElementById('werkzeugBeschreibung').value.trim();
             const inventarnummer = document.getElementById('werkzeugInventarnummer').value.trim();
+            const lagerplatz = document.getElementById('werkzeugLagerplatz').value.trim();
             const zustand = document.getElementById('werkzeugZustand').value;
             
             const previewDiv = document.getElementById('fotoPreview');
@@ -2145,18 +2122,18 @@
             try {
                 if (id) {
                     if (shouldRemoveFoto) {
-                        db.run('UPDATE werkzeuge SET name = ?, kategorie = ?, beschreibung = ?, inventarnummer = ?, zustand = ?, foto = NULL WHERE id = ?',
-                            [name, kategorie || null, beschreibung, inventarnummer, zustand, id]);
+                        db.run('UPDATE werkzeuge SET name = ?, kategorie = ?, beschreibung = ?, inventarnummer = ?, lagerplatz = ?, zustand = ?, foto = NULL WHERE id = ?',
+                            [name, kategorie || null, beschreibung, inventarnummer, lagerplatz || null, zustand, id]);
                     } else if (fotoBase64) {
-                        db.run('UPDATE werkzeuge SET name = ?, kategorie = ?, beschreibung = ?, inventarnummer = ?, zustand = ?, foto = ? WHERE id = ?',
-                            [name, kategorie || null, beschreibung, inventarnummer, zustand, fotoBase64, id]);
+                        db.run('UPDATE werkzeuge SET name = ?, kategorie = ?, beschreibung = ?, inventarnummer = ?, lagerplatz = ?, zustand = ?, foto = ? WHERE id = ?',
+                            [name, kategorie || null, beschreibung, inventarnummer, lagerplatz || null, zustand, fotoBase64, id]);
                     } else {
-                        db.run('UPDATE werkzeuge SET name = ?, kategorie = ?, beschreibung = ?, inventarnummer = ?, zustand = ? WHERE id = ?',
-                            [name, kategorie || null, beschreibung, inventarnummer, zustand, id]);
+                        db.run('UPDATE werkzeuge SET name = ?, kategorie = ?, beschreibung = ?, inventarnummer = ?, lagerplatz = ?, zustand = ? WHERE id = ?',
+                            [name, kategorie || null, beschreibung, inventarnummer, lagerplatz || null, zustand, id]);
                     }
                 } else {
-                    db.run("INSERT INTO werkzeuge (name, kategorie, beschreibung, inventarnummer, zustand, foto, status) VALUES (?, ?, ?, ?, ?, ?, 'verfuegbar')",
-                        [name, kategorie || null, beschreibung, inventarnummer, zustand, fotoBase64 || null]);
+                    db.run("INSERT INTO werkzeuge (name, kategorie, beschreibung, inventarnummer, lagerplatz, zustand, foto, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'verfuegbar')",
+                        [name, kategorie || null, beschreibung, inventarnummer, lagerplatz || null, zustand, fotoBase64 || null]);
                 }
                 
                 if (saveDatabase()) {
@@ -2310,7 +2287,7 @@
             }
             stmt.free();
             
-            let csv = 'Werkzeug,Beschreibung,Zustand,Inventarnummer,Kategorie,Status\n';
+            let csv = 'Werkzeug,Beschreibung,Zustand,Inventarnummer,Kategorie,Lagerplatz,Status\n';
             werkzeuge.forEach(w => {
                 const escapeCsv = (str) => {
                     str = String(str || '');
@@ -2319,7 +2296,7 @@
                     }
                     return str;
                 };
-                csv += `${escapeCsv(w.name)},${escapeCsv(w.beschreibung)},${escapeCsv(w.zustand)},${escapeCsv(w.inventarnummer)},${escapeCsv(w.kategorie)},${w.status}\n`;
+                csv += `${escapeCsv(w.name)},${escapeCsv(w.beschreibung)},${escapeCsv(w.zustand)},${escapeCsv(w.inventarnummer)},${escapeCsv(w.kategorie)},${escapeCsv(w.lagerplatz)},${w.status}\n`;
             });
             
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
