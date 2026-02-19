@@ -512,6 +512,30 @@
         .damage-report strong {
             color: #e65100;
         }
+        
+        /* Print Styles für QR-Code */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #qrModal, #qrModal * {
+                visibility: visible;
+            }
+            #qrModal {
+                position: absolute;
+                left: 0;
+                top: 0;
+                background: white;
+            }
+            .modal-content {
+                box-shadow: none;
+                max-width: 100%;
+                padding: 20px;
+            }
+            button {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -781,7 +805,39 @@
                 </p>
             </div>
             <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                <button class="btn-primary" onclick="printQRCode()">🖨️ Drucken</button>
                 <button class="btn-secondary" onclick="closeModal('qrModal')">Schließen</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Ad-hoc Zuordnung Modal (bei QR-Scan ohne Reservierung) -->
+    <div class="modal" id="adhocModal">
+        <div class="modal-content">
+            <h2>🔧 Werkzeug direkt ausgeben</h2>
+            <p><strong>Werkzeug:</strong> <span id="adhocWerkzeugName"></span></p>
+            <p><strong>Inventarnummer:</strong> <span id="adhocInventarnummer"></span></p>
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Mitarbeiter: *</label>
+                <input type="text" id="adhocMitarbeiter" placeholder="Name des Mitarbeiters">
+            </div>
+            <div class="form-group">
+                <label>Zeitraum:</label>
+                <div class="date-inputs">
+                    <div>
+                        <label>Von: *</label>
+                        <input type="date" id="adhocVon">
+                    </div>
+                    <div>
+                        <label>Bis: *</label>
+                        <input type="date" id="adhocBis">
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="adhocWerkzeugId">
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn-success" onclick="submitAdhocAusgabe()">✓ Direkt ausgeben</button>
+                <button class="btn-secondary" onclick="closeModal('adhocModal')">Abbrechen</button>
             </div>
         </div>
     </div>
@@ -921,31 +977,125 @@
         function checkQRCodeScan() {
             const urlParams = new URLSearchParams(window.location.search);
             const inventarnummer = urlParams.get('inv');
+            const isAdminScan = urlParams.get('admin') === '1';
             
             if (inventarnummer) {
                 // Werkzeug anhand Inventarnummer finden
-                const stmt = db.prepare("SELECT * FROM werkzeuge WHERE inventarnummer = ? AND status = 'verfuegbar'");
+                const stmt = db.prepare("SELECT * FROM werkzeuge WHERE inventarnummer = ?");
                 stmt.bind([inventarnummer]);
                 
                 if (stmt.step()) {
                     const werkzeug = stmt.getAsObject();
                     stmt.free();
                     
-                    // Zum Warenkorb hinzufügen
-                    warenkorb.add(werkzeug.id);
-                    updateWarenkorbCount();
-                    loadWerkzeuge();
+                    if (isAdminScan) {
+                        // Admin-Scan: Automatische Ausgabe oder Ad-hoc
+                        handleAdminScan(werkzeug);
+                    } else {
+                        // Normaler Mitarbeiter-Scan: Zum Warenkorb (nur wenn verfügbar)
+                        if (werkzeug.status === 'verfuegbar') {
+                            warenkorb.add(werkzeug.id);
+                            updateWarenkorbCount();
+                            loadWerkzeuge();
+                            showToast(`✓ ${werkzeug.name} (${inventarnummer}) automatisch zum Warenkorb hinzugefügt!`);
+                        } else {
+                            alert(`❌ Werkzeug "${werkzeug.name}" ist aktuell nicht verfügbar (Status: ${werkzeug.status}).`);
+                        }
+                    }
                     
-                    // Erfolgs-Toast
-                    showToast(`✓ ${werkzeug.name} (${inventarnummer}) automatisch zum Warenkorb hinzugefügt!`);
-                    
-                    // URL bereinigen (Parameter entfernen)
+                    // URL bereinigen
                     window.history.replaceState({}, document.title, window.location.pathname);
                 } else {
                     stmt.free();
-                    alert(`❌ Werkzeug mit Inventarnummer "${inventarnummer}" nicht verfügbar oder nicht gefunden.`);
+                    alert(`❌ Werkzeug mit Inventarnummer "${inventarnummer}" nicht gefunden.`);
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
+            }
+        }
+        
+        function handleAdminScan(werkzeug) {
+            if (werkzeug.status === 'reserviert') {
+                // Automatisch ausgeben: reserviert → ausgeliehen
+                const stmt = db.prepare('SELECT * FROM ausleihen WHERE werkzeug_id = ? AND status = ?');
+                stmt.bind([werkzeug.id, 'reserviert']);
+                
+                if (stmt.step()) {
+                    const ausleihe = stmt.getAsObject();
+                    stmt.free();
+                    
+                    const now = new Date().toISOString();
+                    db.run("UPDATE ausleihen SET status = 'ausgeliehen', ausgeliehen_am = ? WHERE id = ?", [now, ausleihe.id]);
+                    db.run("UPDATE werkzeuge SET status = 'ausgeliehen' WHERE id = ?", [werkzeug.id]);
+                    
+                    if (saveDatabase()) {
+                        showToast(`✓ ${werkzeug.name} automatisch ausgegeben an ${ausleihe.mitarbeiter_name}!`);
+                        loadWerkzeuge();
+                        loadMeineReservierungen();
+                    }
+                } else {
+                    stmt.free();
+                    alert('❌ Keine Reservierung für dieses Werkzeug gefunden.');
+                }
+            } else if (werkzeug.status === 'verfuegbar') {
+                // Ad-hoc Zuordnung: Modal öffnen
+                showAdhocModal(werkzeug);
+            } else if (werkzeug.status === 'ausgeliehen') {
+                alert(`❌ Werkzeug "${werkzeug.name}" ist bereits ausgeliehen.`);
+            } else if (werkzeug.status === 'defekt') {
+                alert(`❌ Werkzeug "${werkzeug.name}" ist defekt und kann nicht ausgegeben werden.`);
+            }
+        }
+        
+        function showAdhocModal(werkzeug) {
+            document.getElementById('adhocWerkzeugName').textContent = werkzeug.name;
+            document.getElementById('adhocInventarnummer').textContent = werkzeug.inventarnummer;
+            document.getElementById('adhocWerkzeugId').value = werkzeug.id;
+            document.getElementById('adhocMitarbeiter').value = '';
+            
+            // Heute + 7 Tage
+            const heute = new Date();
+            const inEinerWoche = new Date();
+            inEinerWoche.setDate(heute.getDate() + 7);
+            
+            document.getElementById('adhocVon').value = heute.toISOString().split('T')[0];
+            document.getElementById('adhocBis').value = inEinerWoche.toISOString().split('T')[0];
+            
+            document.getElementById('adhocModal').classList.add('active');
+        }
+        
+        function submitAdhocAusgabe() {
+            const werkzeugId = document.getElementById('adhocWerkzeugId').value;
+            const mitarbeiter = document.getElementById('adhocMitarbeiter').value.trim();
+            const von = document.getElementById('adhocVon').value;
+            const bis = document.getElementById('adhocBis').value;
+            
+            if (!mitarbeiter || !von || !bis) {
+                alert('❌ Bitte alle Felder ausfüllen!');
+                return;
+            }
+            
+            if (new Date(bis) < new Date(von)) {
+                alert('❌ "Bis"-Datum muss nach "Von"-Datum liegen!');
+                return;
+            }
+            
+            const now = new Date().toISOString();
+            
+            try {
+                // Direkt als "ausgeliehen" anlegen (nicht reserviert)
+                db.run('INSERT INTO ausleihen (werkzeug_id, mitarbeiter_name, datum_von, datum_bis, reserviert_am, ausgeliehen_am, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [werkzeugId, mitarbeiter, von, bis, now, now, 'ausgeliehen']);
+                db.run("UPDATE werkzeuge SET status = 'ausgeliehen' WHERE id = ?", [werkzeugId]);
+                
+                if (saveDatabase()) {
+                    closeModal('adhocModal');
+                    loadWerkzeuge();
+                    loadMeineReservierungen();
+                    showToast(`✓ Werkzeug direkt an ${mitarbeiter} ausgegeben!`);
+                }
+            } catch (err) {
+                alert('Fehler beim Ausgeben: ' + err.message);
+                console.error(err);
             }
         }
         
@@ -1563,8 +1713,8 @@
             const qrcodeContainer = document.getElementById('qrcode');
             qrcodeContainer.innerHTML = '';
             
-            // QR-Code mit vollständiger App-URL + Inventarnummer
-            const appUrl = window.location.origin + window.location.pathname + '?inv=' + encodeURIComponent(inventarnummer);
+            // QR-Code mit vollständiger App-URL + Inventarnummer + Admin-Flag
+            const appUrl = window.location.origin + window.location.pathname + '?inv=' + encodeURIComponent(inventarnummer) + '&admin=1';
             
             new QRCode(qrcodeContainer, {
                 text: appUrl,
@@ -1576,6 +1726,10 @@
             });
             
             document.getElementById('qrModal').classList.add('active');
+        }
+        
+        function printQRCode() {
+            window.print();
         }
         
         function showSchadenModal(werkzeugId) {
