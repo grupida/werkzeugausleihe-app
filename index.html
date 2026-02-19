@@ -774,8 +774,11 @@
                 <p style="margin-top: 15px; font-size: 0.9em;">
                     <strong>Inventarnummer:</strong> <span id="qrInventarnummer"></span>
                 </p>
-                <p style="font-size: 0.85em; color: #666; margin-top: 10px;">
-                    Werkzeug scannen und direkt reservieren!
+                <p style="font-size: 0.85em; color: #667eea; margin-top: 10px; font-weight: bold;">
+                    📱 QR-Code mit Handy scannen!
+                </p>
+                <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                    Öffnet die App und legt das Werkzeug automatisch in den Warenkorb.
                 </p>
             </div>
             <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
@@ -906,9 +909,44 @@
                 loadKategorien();
                 loadWerkzeuge();
                 loadMeineReservierungen();
+                
+                // QR-Code Scan: Prüfe URL-Parameter
+                checkQRCodeScan();
             } catch (err) {
                 showError('Fehler beim Initialisieren: ' + err.message);
                 console.error(err);
+            }
+        }
+        
+        // QR-Code Scan Handler
+        function checkQRCodeScan() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const inventarnummer = urlParams.get('inv');
+            
+            if (inventarnummer) {
+                // Werkzeug anhand Inventarnummer finden
+                const stmt = db.prepare("SELECT * FROM werkzeuge WHERE inventarnummer = ? AND status = 'verfuegbar'");
+                stmt.bind([inventarnummer]);
+                
+                if (stmt.step()) {
+                    const werkzeug = stmt.getAsObject();
+                    stmt.free();
+                    
+                    // Zum Warenkorb hinzufügen
+                    warenkorb.add(werkzeug.id);
+                    updateWarenkorbCount();
+                    loadWerkzeuge();
+                    
+                    // Erfolgs-Toast
+                    showToast(`✓ ${werkzeug.name} (${inventarnummer}) automatisch zum Warenkorb hinzugefügt!`);
+                    
+                    // URL bereinigen (Parameter entfernen)
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else {
+                    stmt.free();
+                    alert(`❌ Werkzeug mit Inventarnummer "${inventarnummer}" nicht verfügbar oder nicht gefunden.`);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
             }
         }
         
@@ -1526,8 +1564,11 @@
             const qrcodeContainer = document.getElementById('qrcode');
             qrcodeContainer.innerHTML = '';
             
+            // QR-Code mit vollständiger App-URL + Inventarnummer
+            const appUrl = window.location.origin + window.location.pathname + '?inv=' + encodeURIComponent(inventarnummer);
+            
             new QRCode(qrcodeContainer, {
-                text: inventarnummer,
+                text: appUrl,
                 width: 256,
                 height: 256,
                 colorDark: "#000000",
