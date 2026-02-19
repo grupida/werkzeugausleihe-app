@@ -710,12 +710,13 @@
                     </div>
                     
                     <div class="section">
-                        <h2>Meine Reservierungen</h2>
+                        <h2>Alle Reservierungen</h2>
                         <table>
                             <thead>
                                 <tr>
                                     <th>Werkzeug</th>
                                     <th>Inv.-Nr.</th>
+                                    <th>Mitarbeiter</th>
                                     <th>Von</th>
                                     <th>Bis</th>
                                     <th>Status</th>
@@ -1377,6 +1378,13 @@
                 `);
             }
             
+            // Cleanup: Alte "behoben" Schadensmeldungen löschen (Issue #12)
+            try {
+                db.run(`DELETE FROM schaeden WHERE status = 'behoben'`);
+            } catch (e) {
+                // Tabelle existiert möglicherweise noch nicht
+            }
+            
             saveDatabase();
         }
         
@@ -1883,7 +1891,7 @@
                 FROM ausleihen a 
                 JOIN werkzeuge w ON a.werkzeug_id = w.id 
                 WHERE a.status IN ('reserviert', 'ausgeliehen')
-                ORDER BY a.datum_von ASC
+                ORDER BY w.name ASC, a.datum_von ASC
             `);
             
             const tbody = document.getElementById('meineReservierungen');
@@ -1907,6 +1915,7 @@
                 tr.innerHTML = `
                     <td><strong>${a.name}</strong></td>
                     <td>${a.inventarnummer}</td>
+                    <td>${a.mitarbeiter_name || '-'}</td>
                     <td>${formatDate(a.datum_von)}</td>
                     <td>${formatDate(a.datum_bis)}</td>
                     <td>${statusBadge}</td>
@@ -1918,7 +1927,7 @@
             stmt.free();
             
             if (tbody.children.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 20px; color: #999;">Keine aktiven Reservierungen</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px; color: #999;">Keine aktiven Reservierungen</td></tr>';
             }
         }
         
