@@ -1112,6 +1112,58 @@
         </div>
     </div>
     
+    <!-- Buchung bearbeiten Modal -->
+    <div class="modal" id="editBuchungModal">
+        <div class="modal-content">
+            <h2>Buchung bearbeiten</h2>
+            <div class="form-group">
+                <label>Werkzeug:</label>
+                <p id="editBuchungWerkzeug" style="font-weight: bold; margin-top: 5px;"></p>
+            </div>
+            <div class="form-group">
+                <label>Mitarbeiter: *</label>
+                <input type="text" id="editBuchungMitarbeiter" placeholder="Name des Mitarbeiters">
+            </div>
+            <div class="form-group">
+                <label>Zeitraum:</label>
+                <div class="date-inputs">
+                    <div>
+                        <label>Von: *</label>
+                        <input type="date" id="editBuchungVon">
+                    </div>
+                    <div>
+                        <label>Bis: *</label>
+                        <input type="date" id="editBuchungBis">
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="editBuchungId">
+            <input type="hidden" id="editBuchungWerkzeugId">
+            <input type="hidden" id="editBuchungOriginalVon">
+            <input type="hidden" id="editBuchungOriginalBis">
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn-success" onclick="saveBuchungEdit()">Speichern</button>
+                <button class="btn-secondary" onclick="closeModal('editBuchungModal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Buchung löschen Modal -->
+    <div class="modal" id="deleteBuchungModal">
+        <div class="modal-content">
+            <h2>⚠️ Buchung löschen</h2>
+            <p>Möchtest du diese Buchung wirklich löschen?</p>
+            <p id="deleteBuchungInfo" style="margin-top: 10px; font-weight: bold;"></p>
+            <p style="margin-top: 10px; color: #ff9800; font-size: 0.9em;">Der Werkzeugstatus wird auf "verfügbar" zurückgesetzt.</p>
+            <input type="hidden" id="deleteBuchungId">
+            <input type="hidden" id="deleteBuchungWerkzeugId">
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn-danger" onclick="confirmBuchungDelete()">Ja, löschen</button>
+                <button class="btn-secondary" onclick="closeModal('deleteBuchungModal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+    
     <script>
         // Globale Variablen
         let db = null;
@@ -2245,9 +2297,15 @@
                 
                 let actions = '';
                 if (a.status === 'reserviert') {
-                    actions = `<button class="btn-success btn-small" onclick="ausgeben(${a.id})">✓ Ausgeben</button>`;
+                    actions = `<button class="btn-success btn-small" onclick="ausgeben(${a.id})">✓ Ausgeben</button> `;
                 } else if (a.status === 'ausgeliehen') {
-                    actions = `<button class="btn-warning btn-small" onclick="showRueckgabeModal(${a.id})">↩ Rückgabe</button>`;
+                    actions = `<button class="btn-warning btn-small" onclick="showRueckgabeModal(${a.id})">↩ Rückgabe</button> `;
+                }
+                
+                // Edit und Delete nur für aktive Buchungen (nicht zurückgegeben)
+                if (a.status !== 'zurueckgegeben') {
+                    actions += `<button class="btn-secondary btn-small" onclick="showEditBuchungModal(${a.id})">✏️</button> `;
+                    actions += `<button class="btn-danger btn-small" onclick="showDeleteBuchungModal(${a.id}, '${escapeQuotes(a.name)}', '${escapeQuotes(a.mitarbeiter_name || 'Unbekannt')}')">🗑️</button>`;
                 }
                 
                 tr.innerHTML = `
@@ -2670,6 +2728,145 @@
         
         function closeModal(modalId) {
             document.getElementById(modalId).classList.remove('active');
+        }
+        
+        // Buchung bearbeiten
+        function showEditBuchungModal(buchungId) {
+            // Buchung laden
+            const buchung = allAusleihenData.find(a => a.id === buchungId);
+            if (!buchung) {
+                alert('Buchung nicht gefunden!');
+                return;
+            }
+            
+            document.getElementById('editBuchungId').value = buchung.id;
+            document.getElementById('editBuchungWerkzeugId').value = buchung.werkzeug_id;
+            document.getElementById('editBuchungWerkzeug').textContent = `${buchung.name} (${buchung.inventarnummer})`;
+            document.getElementById('editBuchungMitarbeiter').value = buchung.mitarbeiter_name || '';
+            document.getElementById('editBuchungVon').value = buchung.datum_von;
+            document.getElementById('editBuchungBis').value = buchung.datum_bis;
+            document.getElementById('editBuchungOriginalVon').value = buchung.datum_von;
+            document.getElementById('editBuchungOriginalBis').value = buchung.datum_bis;
+            
+            document.getElementById('editBuchungModal').classList.add('active');
+        }
+        
+        function saveBuchungEdit() {
+            const buchungId = parseInt(document.getElementById('editBuchungId').value);
+            const werkzeugId = parseInt(document.getElementById('editBuchungWerkzeugId').value);
+            const mitarbeiter = document.getElementById('editBuchungMitarbeiter').value.trim();
+            const von = document.getElementById('editBuchungVon').value;
+            const bis = document.getElementById('editBuchungBis').value;
+            const originalVon = document.getElementById('editBuchungOriginalVon').value;
+            const originalBis = document.getElementById('editBuchungOriginalBis').value;
+            
+            if (!mitarbeiter || !von || !bis) {
+                alert('❌ Bitte alle Felder ausfüllen!');
+                return;
+            }
+            
+            if (new Date(bis) < new Date(von)) {
+                alert('❌ "Bis"-Datum muss nach "Von"-Datum liegen!');
+                return;
+            }
+            
+            // Prüfen ob Zeitraum geändert wurde
+            const zeitraumGeaendert = von !== originalVon || bis !== originalBis;
+            
+            if (zeitraumGeaendert) {
+                // Verfügbarkeitsprüfung (ausgenommen die eigene Buchung)
+                const stmt = db.prepare(`
+                    SELECT COUNT(*) as count FROM ausleihen 
+                    WHERE werkzeug_id = ? 
+                    AND id != ?
+                    AND status IN ('reserviert', 'ausgeliehen')
+                    AND (
+                        (datum_von <= ? AND datum_bis >= ?) OR
+                        (datum_von >= ? AND datum_von <= ?) OR
+                        (datum_bis >= ? AND datum_bis <= ?)
+                    )
+                `);
+                stmt.bind([werkzeugId, buchungId, bis, von, von, bis, von, bis]);
+                
+                let conflicts = 0;
+                if (stmt.step()) {
+                    conflicts = stmt.getAsObject().count;
+                }
+                stmt.free();
+                
+                if (conflicts > 0) {
+                    alert('❌ Werkzeug ist im gewählten Zeitraum bereits reserviert oder ausgeliehen!');
+                    return;
+                }
+            }
+            
+            // Buchung aktualisieren
+            try {
+                db.run('UPDATE ausleihen SET mitarbeiter_name = ?, datum_von = ?, datum_bis = ? WHERE id = ?',
+                    [mitarbeiter, von, bis, buchungId]);
+                
+                if (saveDatabase()) {
+                    closeModal('editBuchungModal');
+                    loadAlleAusleihen();
+                    filterAusleihen();
+                    loadDashboard();
+                    if (currentMode === 'admin') loadBuchungskalender();
+                    showToast('✓ Buchung aktualisiert!');
+                }
+            } catch (err) {
+                alert('❌ Fehler beim Speichern: ' + err.message);
+                console.error(err);
+            }
+        }
+        
+        function showDeleteBuchungModal(buchungId, werkzeugName, mitarbeiterName) {
+            const buchung = allAusleihenData.find(a => a.id === buchungId);
+            if (!buchung) {
+                alert('Buchung nicht gefunden!');
+                return;
+            }
+            
+            document.getElementById('deleteBuchungId').value = buchung.id;
+            document.getElementById('deleteBuchungWerkzeugId').value = buchung.werkzeug_id;
+            document.getElementById('deleteBuchungInfo').textContent = `${werkzeugName} - ${mitarbeiterName} (${formatDate(buchung.datum_von)} - ${formatDate(buchung.datum_bis)})`;
+            
+            document.getElementById('deleteBuchungModal').classList.add('active');
+        }
+        
+        function confirmBuchungDelete() {
+            const buchungId = parseInt(document.getElementById('deleteBuchungId').value);
+            const werkzeugId = parseInt(document.getElementById('deleteBuchungWerkzeugId').value);
+            
+            try {
+                // Buchung löschen
+                db.run('DELETE FROM ausleihen WHERE id = ?', [buchungId]);
+                
+                // Werkzeugstatus prüfen: Gibt es noch andere aktive Buchungen?
+                const stmt = db.prepare('SELECT COUNT(*) as count FROM ausleihen WHERE werkzeug_id = ? AND status IN (?, ?)', [werkzeugId, 'reserviert', 'ausgeliehen']);
+                let hasOtherBookings = false;
+                if (stmt.step()) {
+                    hasOtherBookings = stmt.getAsObject().count > 0;
+                }
+                stmt.free();
+                
+                // Werkzeugstatus zurücksetzen wenn keine anderen Buchungen vorhanden
+                if (!hasOtherBookings) {
+                    db.run("UPDATE werkzeuge SET status = 'verfuegbar' WHERE id = ?", [werkzeugId]);
+                }
+                
+                if (saveDatabase()) {
+                    closeModal('deleteBuchungModal');
+                    loadAlleAusleihen();
+                    filterAusleihen();
+                    loadDashboard();
+                    loadAdminWerkzeuge();
+                    if (currentMode === 'admin') loadBuchungskalender();
+                    showToast('✓ Buchung gelöscht!');
+                }
+            } catch (err) {
+                alert('❌ Fehler beim Löschen: ' + err.message);
+                console.error(err);
+            }
         }
         
         // Buchungskalender
