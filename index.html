@@ -838,6 +838,7 @@
                                         <th>Werkzeug</th>
                                         <th>Lagerplatz</th>
                                         <th>Mitarbeiter</th>
+                                        <th>Projekt-Nr.</th>
                                         <th>Von/Bis</th>
                                         <th>Status</th>
                                         <th>History</th>
@@ -923,6 +924,11 @@
                 </div>
             </div>
             <div class="form-group">
+                <label>Projektnummer: *</label>
+                <input type="text" id="projektnummer" placeholder="1234567" maxlength="7" pattern="[0-9]{7}" style="font-family: monospace; letter-spacing: 2px;">
+                <small style="color: #999; display: block; margin-top: 5px;">Genau 7 Ziffern erforderlich</small>
+            </div>
+            <div class="form-group">
                 <label>Werkzeuge:</label>
                 <div id="warenkorbItems"></div>
             </div>
@@ -940,11 +946,6 @@
             <div class="form-group">
                 <label>Werkzeugname: *</label>
                 <input type="text" id="werkzeugName">
-            </div>
-            <div class="form-group">
-                <label>Icon (Emoji):</label>
-                <input type="text" id="werkzeugIcon" placeholder="z.B. 🔨 🔧 ⚡ 🪛" maxlength="2" style="font-size: 2em; text-align: center; width: 80px;">
-                <small style="color: #999; display: block; margin-top: 5px;">Emoji-Picker des Geräts nutzen oder kopieren/einfügen</small>
             </div>
             <div class="form-group">
                 <label>Kategorie: *</label>
@@ -1123,6 +1124,11 @@
             <div class="form-group">
                 <label>Mitarbeiter: *</label>
                 <input type="text" id="editBuchungMitarbeiter" placeholder="Name des Mitarbeiters">
+            </div>
+            <div class="form-group">
+                <label>Projektnummer: *</label>
+                <input type="text" id="editBuchungProjektnummer" placeholder="1234567" maxlength="7" pattern="[0-9]{7}" style="font-family: monospace; letter-spacing: 2px;">
+                <small style="color: #999; display: block; margin-top: 5px;">Genau 7 Ziffern erforderlich</small>
             </div>
             <div class="form-group">
                 <label>Zeitraum:</label>
@@ -1482,6 +1488,13 @@
                 db.run(`DELETE FROM schaeden WHERE status = 'behoben'`);
             } catch (e) {
                 // Tabelle existiert möglicherweise noch nicht
+            }
+            
+            // Projektnummer-Spalte hinzufügen (Issue #18)
+            try {
+                db.run(`ALTER TABLE ausleihen ADD COLUMN projektnummer TEXT`);
+            } catch (e) {
+                // Spalte existiert bereits
             }
             
             saveDatabase();
@@ -1955,9 +1968,16 @@
             const name = document.getElementById('mitarbeiterName').value.trim();
             const von = document.getElementById('datumVon').value;
             const bis = document.getElementById('datumBis').value;
+            const projektnummer = document.getElementById('projektnummer').value.trim();
             
-            if (!name || !von || !bis) {
-                alert('❌ Bitte Name und Zeitraum angeben!');
+            if (!name || !von || !bis || !projektnummer) {
+                alert('❌ Bitte alle Felder ausfüllen (Name, Zeitraum, Projektnummer)!');
+                return;
+            }
+            
+            // Validierung Projektnummer: genau 7 Ziffern
+            if (!/^\d{7}$/.test(projektnummer)) {
+                alert('❌ Projektnummer muss genau 7 Ziffern enthalten!');
                 return;
             }
             
@@ -1970,8 +1990,8 @@
             
             try {
                 warenkorb.forEach(id => {
-                    db.run('INSERT INTO ausleihen (werkzeug_id, mitarbeiter_name, datum_von, datum_bis, reserviert_am, status) VALUES (?, ?, ?, ?, ?, ?)',
-                        [id, name, von, bis, now, 'reserviert']);
+                    db.run('INSERT INTO ausleihen (werkzeug_id, mitarbeiter_name, datum_von, datum_bis, projektnummer, reserviert_am, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [id, name, von, bis, projektnummer, now, 'reserviert']);
                     db.run("UPDATE werkzeuge SET status = 'reserviert' WHERE id = ?", [id]);
                 });
                 
@@ -2273,7 +2293,7 @@
             tbody.innerHTML = '';
             
             if (ausleihen.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 20px; color: #999;">Keine Ausleihen gefunden</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px; color: #999;">Keine Ausleihen gefunden</td></tr>';
                 return;
             }
             
@@ -2314,6 +2334,7 @@
                     <td><strong>${a.name}</strong><br><small>${a.inventarnummer}</small></td>
                     <td>${a.lagerplatz || '-'}</td>
                     <td>${a.mitarbeiter_name || '-'}</td>
+                    <td style="font-family: monospace;">${a.projektnummer || '-'}</td>
                     <td>${formatDate(a.datum_von)} - ${formatDate(a.datum_bis)}</td>
                     <td>${statusBadge}</td>
                     <td style="font-size: 0.85em;">${history}</td>
@@ -2745,6 +2766,7 @@
             document.getElementById('editBuchungWerkzeugId').value = buchung.werkzeug_id;
             document.getElementById('editBuchungWerkzeug').textContent = `${buchung.name} (${buchung.inventarnummer})`;
             document.getElementById('editBuchungMitarbeiter').value = buchung.mitarbeiter_name || '';
+            document.getElementById('editBuchungProjektnummer').value = buchung.projektnummer || '';
             document.getElementById('editBuchungVon').value = buchung.datum_von;
             document.getElementById('editBuchungBis').value = buchung.datum_bis;
             document.getElementById('editBuchungOriginalVon').value = buchung.datum_von;
@@ -2757,13 +2779,20 @@
             const buchungId = parseInt(document.getElementById('editBuchungId').value);
             const werkzeugId = parseInt(document.getElementById('editBuchungWerkzeugId').value);
             const mitarbeiter = document.getElementById('editBuchungMitarbeiter').value.trim();
+            const projektnummer = document.getElementById('editBuchungProjektnummer').value.trim();
             const von = document.getElementById('editBuchungVon').value;
             const bis = document.getElementById('editBuchungBis').value;
             const originalVon = document.getElementById('editBuchungOriginalVon').value;
             const originalBis = document.getElementById('editBuchungOriginalBis').value;
             
-            if (!mitarbeiter || !von || !bis) {
+            if (!mitarbeiter || !projektnummer || !von || !bis) {
                 alert('❌ Bitte alle Felder ausfüllen!');
+                return;
+            }
+            
+            // Validierung Projektnummer: genau 7 Ziffern
+            if (!/^\d{7}$/.test(projektnummer)) {
+                alert('❌ Projektnummer muss genau 7 Ziffern enthalten!');
                 return;
             }
             
@@ -2804,8 +2833,8 @@
             
             // Buchung aktualisieren
             try {
-                db.run('UPDATE ausleihen SET mitarbeiter_name = ?, datum_von = ?, datum_bis = ? WHERE id = ?',
-                    [mitarbeiter, von, bis, buchungId]);
+                db.run('UPDATE ausleihen SET mitarbeiter_name = ?, projektnummer = ?, datum_von = ?, datum_bis = ? WHERE id = ?',
+                    [mitarbeiter, projektnummer, von, bis, buchungId]);
                 
                 if (saveDatabase()) {
                     closeModal('editBuchungModal');
