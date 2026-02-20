@@ -498,119 +498,151 @@
         }
         
         /* Buchungskalender */
-        .kalender-grid {
-            display: grid;
-            grid-template-columns: 200px 1fr;
-            gap: 0;
+        .kalender-wrapper {
+            overflow-x: auto;
             border: 1px solid #ddd;
             border-radius: 5px;
-            overflow: hidden;
             background: white;
         }
         
-        .kalender-header {
-            display: grid;
-            grid-template-columns: 200px 1fr;
-            gap: 0;
-            background: #f5f5f5;
-            border-bottom: 2px solid #ddd;
-            font-weight: bold;
+        .kalender-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1000px;
         }
         
-        .kalender-header-left {
-            padding: 10px;
-            border-right: 1px solid #ddd;
-        }
-        
-        .kalender-header-right {
-            display: flex;
-            overflow-x: auto;
-        }
-        
-        .kalender-day {
-            min-width: 50px;
-            padding: 10px 5px;
-            text-align: center;
-            border-right: 1px solid #eee;
-            font-size: 0.8em;
-        }
-        
-        .kalender-day.today {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-        
-        .kalender-row {
-            display: contents;
-        }
-        
-        .kalender-werkzeug {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-            border-right: 1px solid #ddd;
-            font-weight: bold;
-            font-size: 0.9em;
-            display: flex;
-            align-items: center;
-        }
-        
-        .kalender-timeline {
-            border-bottom: 1px solid #eee;
-            position: relative;
-            display: flex;
-            min-height: 50px;
-            align-items: center;
-        }
-        
-        .kalender-timeline-inner {
-            position: absolute;
-            left: 0;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            display: flex;
-        }
-        
-        .kalender-day-cell {
-            min-width: 50px;
-            border-right: 1px solid #eee;
-            position: relative;
-        }
-        
-        .kalender-day-cell.today {
-            background: #e3f2fd;
-        }
-        
-        .kalender-booking {
-            position: absolute;
-            top: 5px;
-            bottom: 5px;
-            border-radius: 3px;
-            padding: 2px 5px;
-            font-size: 0.75em;
+        .kalender-table th {
+            background: #7c3aed;
             color: white;
+            padding: 12px 8px;
+            text-align: center;
+            border: 1px solid #6b21a8;
+            font-size: 0.85em;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .kalender-table th:first-child {
+            text-align: left;
+            min-width: 180px;
+            max-width: 180px;
+        }
+        
+        .kalender-table th.today {
+            background: #1976d2;
+        }
+        
+        .kalender-table td {
+            border: 1px solid #e0e0e0;
+            padding: 8px;
+            text-align: center;
+            vertical-align: middle;
+            min-width: 40px;
+            max-width: 40px;
+            height: 50px;
+            position: relative;
+        }
+        
+        .kalender-table td:first-child {
+            text-align: left;
+            font-weight: bold;
+            background: #f9f9f9;
+            min-width: 180px;
+            max-width: 180px;
+            padding: 8px 12px;
+        }
+        
+        .kalender-table td.today {
+            background: #e3f2fd;
+        }
+        
+        .kalender-table td.weekend {
+            background: #fafafa;
+        }
+        
+        .kalender-werkzeug-name {
+            display: block;
+            font-size: 0.9em;
+        }
+        
+        .kalender-werkzeug-inv {
+            display: block;
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        .kalender-day-header {
+            display: block;
+            font-size: 0.7em;
+            font-weight: normal;
+            opacity: 0.9;
+        }
+        
+        .kalender-day-number {
+            display: block;
+            font-size: 1.1em;
+        }
+        
+        .kalender-cell-content {
+            font-size: 0.7em;
+            font-weight: bold;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+            display: inline-block;
+            max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            cursor: pointer;
-            z-index: 10;
         }
         
-        .kalender-booking.reserviert {
+        .kalender-cell-content.reserviert {
             background: #ff9800;
         }
         
-        .kalender-booking.ausgeliehen {
+        .kalender-cell-content.ausgeliehen {
             background: #f44336;
         }
         
-        .kalender-booking.zurueckgegeben {
+        .kalender-cell-content.zurueckgegeben {
             background: #9e9e9e;
         }
         
-        .kalender-booking:hover {
-            opacity: 0.8;
-            z-index: 20;
+        .kalender-legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            font-size: 0.85em;
+        }
+        
+        .kalender-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .kalender-legend-box {
+            width: 20px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        .kalender-legend-box.reserviert {
+            background: #ff9800;
+        }
+        
+        .kalender-legend-box.ausgeliehen {
+            background: #f44336;
+        }
+        
+        .kalender-legend-box.zurueckgegeben {
+            background: #9e9e9e;
         }
         
         /* Print Styles für QR-Code */
@@ -2757,14 +2789,40 @@
         
         function renderKalender(werkzeuge, ausleihen, startDate, endDate, days) {
             const container = document.getElementById('kalenderContainer');
-            
-            // Header mit Datumsleiste
-            let headerHTML = '<div class="kalender-header">';
-            headerHTML += '<div class="kalender-header-left">Werkzeug</div>';
-            headerHTML += '<div class="kalender-header-right">';
-            
             const heute = new Date();
             heute.setHours(0, 0, 0, 0);
+            
+            // Buchungen pro Werkzeug und Tag organisieren
+            const buchungenMap = new Map();
+            werkzeuge.forEach(w => {
+                buchungenMap.set(w.id, new Map());
+            });
+            
+            ausleihen.forEach(a => {
+                if (!buchungenMap.has(a.werkzeug_id)) return;
+                
+                const vonDate = new Date(a.datum_von);
+                const bisDate = new Date(a.datum_bis);
+                
+                // Für jeden Tag in der Buchung
+                for (let d = new Date(vonDate); d <= bisDate; d.setDate(d.getDate() + 1)) {
+                    const dayKey = d.toISOString().split('T')[0];
+                    const werkzeugMap = buchungenMap.get(a.werkzeug_id);
+                    
+                    if (!werkzeugMap.has(dayKey)) {
+                        werkzeugMap.set(dayKey, []);
+                    }
+                    werkzeugMap.get(dayKey).push(a);
+                }
+            });
+            
+            // Table bauen
+            let html = '<div class="kalender-wrapper">';
+            html += '<table class="kalender-table">';
+            
+            // Header
+            html += '<thead><tr>';
+            html += '<th>Werkzeug</th>';
             
             for (let i = 0; i < days; i++) {
                 const day = new Date(startDate);
@@ -2774,58 +2832,84 @@
                 const dayStr = day.getDate();
                 const weekdayShort = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][day.getDay()];
                 
-                headerHTML += `<div class="kalender-day ${isToday ? 'today' : ''}">${weekdayShort}<br>${dayStr}</div>`;
+                html += `<th class="${isToday ? 'today' : ''}">`;
+                html += `<span class="kalender-day-header">${weekdayShort}</span>`;
+                html += `<span class="kalender-day-number">${dayStr}</span>`;
+                html += `</th>`;
             }
             
-            headerHTML += '</div></div>';
+            html += '</tr></thead>';
             
-            // Werkzeug-Rows mit Timeline
-            let rowsHTML = '';
+            // Body: Werkzeug-Rows
+            html += '<tbody>';
             
             werkzeuge.forEach(w => {
-                rowsHTML += '<div class="kalender-row">';
-                rowsHTML += `<div class="kalender-werkzeug">${w.name}<br><small>${w.inventarnummer}</small></div>`;
-                rowsHTML += '<div class="kalender-timeline">';
-                rowsHTML += '<div class="kalender-timeline-inner">';
+                html += '<tr>';
+                html += `<td>`;
+                html += `<span class="kalender-werkzeug-name">${w.name}</span>`;
+                html += `<span class="kalender-werkzeug-inv">${w.inventarnummer}</span>`;
+                html += `</td>`;
                 
-                // Day-Cells
+                const werkzeugMap = buchungenMap.get(w.id);
+                
                 for (let i = 0; i < days; i++) {
                     const day = new Date(startDate);
                     day.setDate(startDate.getDate() + i);
-                    const isToday = day.getTime() === heute.getTime();
+                    const dayKey = day.toISOString().split('T')[0];
                     
-                    rowsHTML += `<div class="kalender-day-cell ${isToday ? 'today' : ''}"></div>`;
+                    const isToday = day.getTime() === heute.getTime();
+                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                    
+                    const buchungen = werkzeugMap.get(dayKey) || [];
+                    
+                    let cellClass = '';
+                    if (isToday) cellClass += 'today ';
+                    if (isWeekend && !isToday) cellClass += 'weekend ';
+                    
+                    html += `<td class="${cellClass}">`;
+                    
+                    if (buchungen.length > 0) {
+                        // Zeige erste Buchung (höchste Priorität: ausgeliehen > reserviert > zurueckgegeben)
+                        const sortedBuchungen = buchungen.sort((a, b) => {
+                            const priority = { 'ausgeliehen': 1, 'reserviert': 2, 'zurueckgegeben': 3 };
+                            return priority[a.status] - priority[b.status];
+                        });
+                        
+                        const buchung = sortedBuchungen[0];
+                        const mitarbeiter = buchung.mitarbeiter_name || '?';
+                        const initials = mitarbeiter.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        const title = `${mitarbeiter}\n${formatDate(buchung.datum_von)} - ${formatDate(buchung.datum_bis)}`;
+                        
+                        html += `<div class="kalender-cell-content ${buchung.status}" title="${escapeQuotes(title)}">${initials}</div>`;
+                    }
+                    
+                    html += `</td>`;
                 }
                 
-                rowsHTML += '</div>'; // timeline-inner
-                
-                // Buchungen für dieses Werkzeug
-                const werkzeugAusleihen = ausleihen.filter(a => a.werkzeug_id === w.id);
-                
-                werkzeugAusleihen.forEach(a => {
-                    const buchungVon = new Date(a.datum_von);
-                    const buchungBis = new Date(a.datum_bis);
-                    
-                    // Position berechnen
-                    const dayWidth = 50; // min-width von kalender-day-cell
-                    
-                    let startOffset = Math.max(0, Math.ceil((buchungVon - startDate) / (1000 * 60 * 60 * 24)));
-                    let endOffset = Math.min(days - 1, Math.ceil((buchungBis - startDate) / (1000 * 60 * 60 * 24)));
-                    
-                    const left = startOffset * dayWidth;
-                    const width = (endOffset - startOffset + 1) * dayWidth;
-                    
-                    const mitarbeiter = a.mitarbeiter_name || 'Unbekannt';
-                    const title = `${mitarbeiter} (${formatDate(a.datum_von)} - ${formatDate(a.datum_bis)})`;
-                    
-                    rowsHTML += `<div class="kalender-booking ${a.status}" style="left: ${left}px; width: ${width}px;" title="${escapeQuotes(title)}">${mitarbeiter}</div>`;
-                });
-                
-                rowsHTML += '</div>'; // timeline
-                rowsHTML += '</div>'; // row
+                html += '</tr>';
             });
             
-            container.innerHTML = '<div class="kalender-grid">' + headerHTML + rowsHTML + '</div>';
+            html += '</tbody>';
+            html += '</table>';
+            html += '</div>';
+            
+            // Legende
+            html += '<div class="kalender-legend">';
+            html += '<div class="kalender-legend-item">';
+            html += '<div class="kalender-legend-box reserviert"></div>';
+            html += '<span>Reserviert</span>';
+            html += '</div>';
+            html += '<div class="kalender-legend-item">';
+            html += '<div class="kalender-legend-box ausgeliehen"></div>';
+            html += '<span>Ausgeliehen</span>';
+            html += '</div>';
+            html += '<div class="kalender-legend-item">';
+            html += '<div class="kalender-legend-box zurueckgegeben"></div>';
+            html += '<span>Zurückgegeben</span>';
+            html += '</div>';
+            html += '</div>';
+            
+            container.innerHTML = html;
         }
     </script>
 </body>
