@@ -2263,7 +2263,9 @@
             }
             stmt.free();
             
-            renderAusleihen(allAusleihenData);
+            // Standard-Filter auf "reserviert" setzen
+            document.getElementById('filterStatus').value = 'reserviert';
+            filterAusleihen();
         }
         
         function renderAusleihen(ausleihen) {
