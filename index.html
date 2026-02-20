@@ -828,17 +828,32 @@
                             
                             <div class="filter-bar">
                                 <label style="display: flex; align-items: center; gap: 10px;">
-                                    Von:
-                                    <input type="date" id="kalenderVon" onchange="loadBuchungskalender()">
+                                    Jahr:
+                                    <select id="kalenderJahr" onchange="loadBuchungskalender()">
+                                        <!-- Wird dynamisch befüllt -->
+                                    </select>
                                 </label>
                                 <label style="display: flex; align-items: center; gap: 10px;">
-                                    Bis:
-                                    <input type="date" id="kalenderBis" onchange="loadBuchungskalender()">
+                                    Monat:
+                                    <select id="kalenderMonat" onchange="loadBuchungskalender()">
+                                        <option value="0">Januar</option>
+                                        <option value="1">Februar</option>
+                                        <option value="2">März</option>
+                                        <option value="3">April</option>
+                                        <option value="4">Mai</option>
+                                        <option value="5">Juni</option>
+                                        <option value="6">Juli</option>
+                                        <option value="7">August</option>
+                                        <option value="8">September</option>
+                                        <option value="9">Oktober</option>
+                                        <option value="10">November</option>
+                                        <option value="11">Dezember</option>
+                                    </select>
                                 </label>
                                 <select id="kalenderWerkzeugFilter" onchange="loadBuchungskalender()">
                                     <option value="">Alle Werkzeuge</option>
                                 </select>
-                                <button class="btn-secondary btn-small" onclick="resetKalenderFilter()">Heute + 30 Tage</button>
+                                <button class="btn-secondary btn-small" onclick="resetKalenderFilter()">Aktueller Monat</button>
                             </div>
                             
                             <div id="kalenderContainer" style="overflow-x: auto; margin-top: 20px;"></div>
@@ -1416,6 +1431,11 @@
         function loadKategorien() {
             const stmt = db.prepare('SELECT DISTINCT kategorie FROM werkzeuge WHERE kategorie IS NOT NULL ORDER BY kategorie');
             const select = document.getElementById('kategorieFilter');
+            
+            // Alte Optionen entfernen (außer "Alle Kategorien")
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
             
             while (stmt.step()) {
                 const kat = stmt.getAsObject().kategorie;
@@ -2630,60 +2650,59 @@
             document.getElementById('werkzeugverwaltungView').classList.add('hidden');
             document.getElementById('buchungskalenderView').classList.remove('hidden');
             
-            // Werkzeuge für Filter laden
+            // Jahr-Dropdown befüllen (aktuelles Jahr ± 2 Jahre)
+            const heute = new Date();
+            const aktuellesJahr = heute.getFullYear();
+            const jahrSelect = document.getElementById('kalenderJahr');
+            jahrSelect.innerHTML = '';
+            
+            for (let jahr = aktuellesJahr - 2; jahr <= aktuellesJahr + 2; jahr++) {
+                const option = document.createElement('option');
+                option.value = jahr;
+                option.textContent = jahr;
+                if (jahr === aktuellesJahr) option.selected = true;
+                jahrSelect.appendChild(option);
+            }
+            
+            // Aktuellen Monat setzen
+            document.getElementById('kalenderMonat').value = heute.getMonth();
+            
+            // Werkzeuge für Filter laden (nach Inventarnummer sortiert)
             const select = document.getElementById('kalenderWerkzeugFilter');
             select.innerHTML = '<option value="">Alle Werkzeuge</option>';
             
-            const stmt = db.prepare('SELECT id, name, inventarnummer FROM werkzeuge ORDER BY name');
+            const stmt = db.prepare('SELECT id, name, inventarnummer FROM werkzeuge ORDER BY inventarnummer');
             while (stmt.step()) {
                 const w = stmt.getAsObject();
                 const option = document.createElement('option');
                 option.value = w.id;
-                option.textContent = `${w.name} (${w.inventarnummer})`;
+                option.textContent = `${w.inventarnummer} - ${w.name}`;
                 select.appendChild(option);
             }
             stmt.free();
             
-            // Standard: Heute + 30 Tage
-            resetKalenderFilter();
+            loadBuchungskalender();
         }
         
         function resetKalenderFilter() {
             const heute = new Date();
-            const in30Tagen = new Date();
-            in30Tagen.setDate(heute.getDate() + 30);
-            
-            document.getElementById('kalenderVon').value = heute.toISOString().split('T')[0];
-            document.getElementById('kalenderBis').value = in30Tagen.toISOString().split('T')[0];
+            document.getElementById('kalenderJahr').value = heute.getFullYear();
+            document.getElementById('kalenderMonat').value = heute.getMonth();
             document.getElementById('kalenderWerkzeugFilter').value = '';
             
             loadBuchungskalender();
         }
         
         function loadBuchungskalender() {
-            const von = document.getElementById('kalenderVon').value;
-            const bis = document.getElementById('kalenderBis').value;
+            const jahr = parseInt(document.getElementById('kalenderJahr').value);
+            const monat = parseInt(document.getElementById('kalenderMonat').value);
             const werkzeugFilter = document.getElementById('kalenderWerkzeugFilter').value;
             
-            if (!von || !bis) {
-                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">Bitte Zeitraum auswählen</p>';
-                return;
-            }
+            // Erster und letzter Tag des Monats
+            const startDate = new Date(jahr, monat, 1);
+            const endDate = new Date(jahr, monat + 1, 0); // Letzter Tag des Monats
             
-            const startDate = new Date(von);
-            const endDate = new Date(bis);
-            
-            if (endDate < startDate) {
-                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">❌ "Bis"-Datum muss nach "Von"-Datum liegen!</p>';
-                return;
-            }
-            
-            const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-            
-            if (daysDiff > 90) {
-                document.getElementById('kalenderContainer').innerHTML = '<p style="text-align: center; color: #ff9800; padding: 20px;">⚠️ Zeitraum zu groß (max. 90 Tage)</p>';
-                return;
-            }
+            const daysInMonth = endDate.getDate();
             
             // Werkzeuge laden
             let werkzeugeQuery = 'SELECT * FROM werkzeuge';
@@ -2694,7 +2713,7 @@
                 params.push(werkzeugFilter);
             }
             
-            werkzeugeQuery += ' ORDER BY name';
+            werkzeugeQuery += ' ORDER BY inventarnummer';
             
             const werkzeugeStmt = db.prepare(werkzeugeQuery);
             werkzeugeStmt.bind(params);
@@ -2710,7 +2729,10 @@
                 return;
             }
             
-            // Ausleihen/Reservierungen im Zeitraum laden
+            // Ausleihen/Reservierungen im Monat laden
+            const vonStr = startDate.toISOString().split('T')[0];
+            const bisStr = endDate.toISOString().split('T')[0];
+            
             const ausleihenStmt = db.prepare(`
                 SELECT * FROM ausleihen 
                 WHERE status IN ('reserviert', 'ausgeliehen', 'zurueckgegeben')
@@ -2721,7 +2743,7 @@
                 )
             `);
             
-            ausleihenStmt.bind([bis, von, von, bis, von, bis]);
+            ausleihenStmt.bind([bisStr, vonStr, vonStr, bisStr, vonStr, bisStr]);
             
             const ausleihen = [];
             while (ausleihenStmt.step()) {
@@ -2730,7 +2752,7 @@
             ausleihenStmt.free();
             
             // Kalender rendern
-            renderKalender(werkzeuge, ausleihen, startDate, endDate, daysDiff);
+            renderKalender(werkzeuge, ausleihen, startDate, endDate, daysInMonth);
         }
         
         function renderKalender(werkzeuge, ausleihen, startDate, endDate, days) {
@@ -2750,9 +2772,9 @@
                 
                 const isToday = day.getTime() === heute.getTime();
                 const dayStr = day.getDate();
-                const monthStr = (day.getMonth() + 1).toString().padStart(2, '0');
+                const weekdayShort = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][day.getDay()];
                 
-                headerHTML += `<div class="kalender-day ${isToday ? 'today' : ''}">${dayStr}.${monthStr}</div>`;
+                headerHTML += `<div class="kalender-day ${isToday ? 'today' : ''}">${weekdayShort}<br>${dayStr}</div>`;
             }
             
             headerHTML += '</div></div>';
