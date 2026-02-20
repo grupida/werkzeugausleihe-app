@@ -940,8 +940,8 @@
             </div>
             <div class="form-group">
                 <label>Projektnummer: *</label>
-                <input type="text" id="projektnummer" placeholder="1234567" maxlength="7" pattern="[0-9]{7}" style="font-family: monospace; letter-spacing: 2px;">
-                <small style="color: #999; display: block; margin-top: 5px;">Genau 7 Ziffern erforderlich</small>
+                <input type="text" id="projektnummer" placeholder="T-12345" maxlength="7" style="font-family: monospace; letter-spacing: 2px;">
+                <small style="color: #999; display: block; margin-top: 5px;">Genau 7 Zeichen erforderlich (Buchstaben, Zahlen, Zeichen)</small>
             </div>
             <div class="form-group">
                 <label>Werkzeuge:</label>
@@ -1142,8 +1142,8 @@
             </div>
             <div class="form-group">
                 <label>Projektnummer: *</label>
-                <input type="text" id="editBuchungProjektnummer" placeholder="1234567" maxlength="7" pattern="[0-9]{7}" style="font-family: monospace; letter-spacing: 2px;">
-                <small style="color: #999; display: block; margin-top: 5px;">Genau 7 Ziffern erforderlich</small>
+                <input type="text" id="editBuchungProjektnummer" placeholder="T-12345" maxlength="7" style="font-family: monospace; letter-spacing: 2px;">
+                <small style="color: #999; display: block; margin-top: 5px;">Genau 7 Zeichen erforderlich (Buchstaben, Zahlen, Zeichen)</small>
             </div>
             <div class="form-group">
                 <label>Zeitraum:</label>
@@ -1998,9 +1998,9 @@
                 return;
             }
             
-            // Validierung Projektnummer: genau 7 Ziffern
-            if (!/^\d{7}$/.test(projektnummer)) {
-                alert('❌ Projektnummer muss genau 7 Ziffern enthalten!');
+            // Validierung Projektnummer: genau 7 Zeichen
+            if (projektnummer.length !== 7) {
+                alert('❌ Projektnummer muss genau 7 Zeichen enthalten!');
                 return;
             }
             
@@ -2819,9 +2819,9 @@
                 return;
             }
             
-            // Validierung Projektnummer: genau 7 Ziffern
-            if (!/^\d{7}$/.test(projektnummer)) {
-                alert('❌ Projektnummer muss genau 7 Ziffern enthalten!');
+            // Validierung Projektnummer: genau 7 Zeichen
+            if (projektnummer.length !== 7) {
+                alert('❌ Projektnummer muss genau 7 Zeichen enthalten!');
                 return;
             }
             
